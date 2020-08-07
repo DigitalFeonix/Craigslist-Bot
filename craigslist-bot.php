@@ -70,7 +70,8 @@ foreach ($searches as $name => $search)
         $html_message .= '<div>'."\n";
         if (count($enc) > 0)
         {
-            $html_message .= '<img src="'.$enc->enclosure->attributes()->resource.'" style="float:left;margin-right:5px;margin-bottom:10px;">'."\n";
+            $html_message .= '<a href="'.$item->link.'">';
+            $html_message .= '<img src="'.$enc->enclosure->attributes()->resource.'" style="float:left;margin-right:5px;margin-bottom:10px;"></a>'."\n";
         }
         $html_message .= $item->description."\n";
         $html_message .= '</div>'."\n";

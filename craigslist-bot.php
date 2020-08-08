@@ -16,11 +16,25 @@ foreach ($searches as $name => $search)
     $text_message = 'Get a real email client!';
     $html_message = '';
 
+    $query = [];
+
+    if (key_exists('q', $search))
+    {
+        $query['query'] = $search['q'];
+    }
+
+    if (key_exists('opt', $search))
+    {
+        $query = array_merge($query, $search['opt']);
+    }
+
+    $qs = http_build_query($query);
+
     $url = sprintf(
-        'https://%s.craigslist.org/search/%s?query=%s&format=rss',
+        'https://%s.craigslist.org/search/%s?%s&format=rss',
         $search['loc'],
         $search['cat'],
-        urlencode($search['q'])
+        $qs
     );
 
     $xml = file_get_contents($url);

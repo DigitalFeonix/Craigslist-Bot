@@ -27,11 +27,14 @@ Each section/search starts with puting a unique name in brackets. This will be u
 email when it sends results.
 
 * `loc` is the city you are searching. When you go to Craigslist it will be part of the domain like `https://seattle.craigslist.org/`
-* `cat` is the 3 character code for the category you are searching under. To get this, navigate the website to the 
+* `cat` is the 3 character code for the category you are searching under. To get this, navigate the website to the
   category you are interested in and it will be at the end of the URL. For example, the overall Jobs page for Seattle is
   `https://seattle.craigslist.org/d/jobs/search/jjj` the code `jjj` at the end is what you are looking for.
 * `q` is the query to search for. You can do some interesting combinations, but will have to be quoted if it is not a
   single word.
+* `opt[param]` is for the optional query parameters you can use when searching categories
+  * the `param` will be replaced with the parameter wanted such as `postal` to denote the US Postal Code that you want to center
+    a search around. This would usually be used in conjunction with `search_distance` to limit the radius of the search area.
 * `ret` is the email address you would like to send the results to.
 * `bcc` is an optional email you could have it BCC'd to
 

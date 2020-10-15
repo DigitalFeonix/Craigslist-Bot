@@ -1,5 +1,8 @@
 # Craigslist Bot
 
+**NOTICE! It seems that Craigslist has shut down the RSS feed which this tool used to search listings.**
+**Until I have a chance to rewrite, this tool will not work.**
+
 This is a simple script that will search Craigslist for you and return any result it finds via email.
 
 The `lib.email.php` and `lib.network.php` files from [DigitalFeonix/Globals-Library](https://github.com/DigitalFeonix/Globals-Library)

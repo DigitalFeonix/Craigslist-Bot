@@ -1,8 +1,5 @@
 # Craigslist Bot
 
-**NOTICE! It seems that Craigslist has shut down the RSS feed which this tool used to search listings.**
-**Until I have a chance to rewrite, this tool will not work.**
-
 This is a simple script that will search Craigslist for you and return any result it finds via email.
 
 The `lib.email.php` and `lib.network.php` files from [DigitalFeonix/Globals-Library](https://github.com/DigitalFeonix/Globals-Library)
@@ -40,10 +37,13 @@ email when it sends results.
     a search around. This would usually be used in conjunction with `search_distance` to limit the radius of the search area.
 * `ret` is the email address you would like to send the results to.
 * `bcc` is an optional email you could have it BCC'd to
+* `searchNearby` is a boolean flag  (if ommited, defaults to false) to indicate if you want to include results that might come back
+  from nearby Craigslist cities. For example, if `loc = seattle` and `searchNearby = true` then it could return results
+  from `https://bellingham.craigslist.org/`
 
 Finally, add the script to crontab in whatever schedule you like
 ```
-0 9,12,15,18,21 * * * /home/user/craigslist-bot.php
+0 9,12,15,18,21 * * * /home/user/craigslist-bot.php > /dev/null 2>&1
 ```
 
 Sit back and watch as the emails roll in.

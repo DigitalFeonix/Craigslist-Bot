@@ -16,6 +16,8 @@ foreach ($searches as $name => $search)
     $text_message = 'Get a real email client!';
     $html_message = '';
 
+    $include_nearby = key_exists('searchNearby', $search) ? $search['searchNearby'] : FALSE;
+
     $query = [];
 
     if (key_exists('q', $search))
@@ -31,63 +33,134 @@ foreach ($searches as $name => $search)
     $qs = http_build_query($query);
 
     $url = sprintf(
-        'https://%s.craigslist.org/search/%s?%s&format=rss',
+        'https://%s.craigslist.org/search/%s?%s&purveyor-input=all',
         $search['loc'],
         $search['cat'],
         $qs
     );
 
-    $xml = file_get_contents($url);
+    echo "Searching for {$name} at {$url}","\n";
+    echo sprintf('last known posting was at %s (%s)', date('Y-m-d H:i:s', $last_run[$md5]), $last_run[$md5]), "\n";
 
-    if ($xml === FALSE)
+    $html = file_get_contents($url);
+
+    if ($html === FALSE)
     {
+        error_log("failed to retrieve {$name}, moving to next search");
         sleep(15);
         continue;
     }
 
-    $xml = mb_convert_encoding($xml,'UTF-8');
+    $html = mb_convert_encoding($html, 'UTF-8');
 
-    if (empty($xml))
+    if (empty($html))
     {
-        error_log('xml was empty');
+        error_log("{$name} html was empty");
         continue;
     }
-
-    $rss = simplexml_load_string($xml);
-
-    if (!is_object($rss))
-    {
-        error_log('rss failed to load');
-        continue;
-    }
-
-    $syn = $rss->channel->children('syn', TRUE);
 
     $is_first_run = !array_key_exists($md5, $last_run);
     $this_run     = !$is_first_run ? $last_run[$md5] : 0;
 
-    foreach ($rss->item as $item)
+    // NOTE: two styles of `result-row` info (normal and repost)
+    // <li class="result-row" data-pid="7433309959">
+    // <li class="result-row" data-pid="7431387316" data-repost-of="7414048538">
+    preg_match_all('#<li class="result-row" data-pid="([0-9]+)".*>(.*)</li>#imsU', $html, $matches);
+
+    $results = array_combine($matches[1], $matches[2]);
+
+    echo sprintf('parsing %d results for %s', count($results), $name), "\n";
+
+    foreach ($results as $posting_id => $result_datum)
     {
-        $enc = $item->children('enc', TRUE);
-        $dc = $item->children('dc', TRUE);
+        // <time class="result-date" datetime="2022-01-19 10:50" title="Wed 19 Jan 10:50:39 AM">Jan 19</time>
+        preg_match('#<time class="result-date" datetime=".*" title="(.*)">.*</time>#i', $result_datum, $time_matches);
+        // Convert "Thu 27 Jan 12:34:56 PM" to "Jan 27 12:34:56 PM"
+        $new_time = preg_replace('#([A-z]{3}) ([0-9]{2}) ([A-z]{3})#i', '$3 $2', $time_matches[1]);
+        $tstamp = strtotime($new_time);
 
-        $tstamp = strtotime($dc->date);
-
-        // put the lastest item as the tstamp to beat
-        if ($tstamp > $this_run) $this_run = $tstamp;
+        // if the timestamp happens to be in the future, force it back a year (this prevents December dates processed in January from being in the far future)
+        if ($tstamp > $get + 86400)
+        {
+            $tstamp = strtotime($new_time, strtotime('-1 year'));
+        }
 
         // skip if older than last known item
-        if (!$is_first_run && $tstamp <= $last_run[$md5]) continue;
-
-        $html_message .= '<h3 style="clear:left;margin-bottom:0px;"><a href="'.$item->link.'">'.$item->title.'</a></h3>'."\n";
-        $html_message .= '<h5 style="margin-top:0px;">Posted '.date('Y-m-d H:i:s', $tstamp).'</h5>'."\n";
-        $html_message .= '<div>'."\n";
-        if (count($enc) > 0)
+        if (!$is_first_run && $tstamp <= $last_run[$md5])
         {
-            $html_message .= '<a href="'.$item->link.'">';
-            $html_message .= '<img src="'.$enc->enclosure->attributes()->resource.'" style="float:left;margin-right:5px;margin-bottom:10px;"></a>'."\n";
+            continue;
         }
-        $html_message .= $item->description."\n";
+
+        echo "found new listing posted at {$time_matches[1]}", "\n";
+
+        // put the lastest item as the tstamp to beat
+        if ($tstamp > $this_run)
+        {
+            $this_run = $tstamp;
+        }
+
+        // <h3 class="result-heading">
+        //     <a href="https://seattle.craigslist.org/tac/clt/d/burton-spirit-halloween-25th-and-30th/7434958449.html" data-id="7434958449" class="result-title hdrlnk" id="postid_7434958449" >spirit halloween 25th AND 30th anniversary t-shirts- NEW</a>
+        // </h3>
+        preg_match('#<h3 class="result-heading">\s*<a href="(.*)" data-id="[0-9]+" class="result-title hdrlnk" id="postid_[0-9]+" >(.*)</a>#imsU', $result_datum, $heading_matches);
+
+        $url_parts = parse_url($heading_matches[1]);
+
+        // check if local or nearby and if we want it before adding to output
+        if (!$include_nearby && $url_parts['host'] !== sprintf('%s.craigslist.org', $search['loc']))
+        {
+            echo 'skipping because not local', "\n";
+            continue;
+        }
+
+        // <span class="result-price">$125</span>
+        preg_match('#<span class="result-price">(.*)</span>#iU', $result_datum, $price_matches);
+
+        // NOTE: examples of local and nearby results
+        // <span class="result-hood"> ( tacoma / pierce )</span>
+        // <span class="nearby" title="bellingham, WA">(bli &gt; Ferndale  )</span>
+        if (!preg_match('#<span class="result-hood">(.*)</span>#iU', $result_datum, $location_matches))
+        {
+            preg_match('#<span class="nearby" title=".*">(.*)</span>#iU', $result_datum, $location_matches);
+        }
+
+        $item = [
+            'date' => $time_matches[1],
+            'link' => $heading_matches[1],
+            'title' => $heading_matches[2],
+            'price' => $price_matches[1],
+            'location' => sprintf('( %s )', trim($location_matches[1], " \n\r\t\v\x00()")), // consistent parentheses
+            'description' => '',
+            'images' => []
+        ];
+
+        // NOTE: examples of images, and no images
+        // <a href="https://seattle.craigslist.org/tac/clt/d/burton-spirit-halloween-25th-and-30th/7434958449.html" class="result-image gallery" data-ids="3:00q0q_4WP6WZ2QGC4z_07K0ak,3:00x0x_gXtzJFqrHkcz_07K0ak">
+        // <a href="https://seattle.craigslist.org/kit/wan/d/bainbridge-island-wanted-vintage/7428397438.html" class="result-image gallery empty"></a>
+        if (preg_match('#<a href=".*" class="result-image gallery" data-ids="(.*)">#iU', $result_datum, $image_matches))
+        {
+            $image_list = explode(',', $image_matches[1]);
+
+            foreach ($image_list as $image_datum)
+            {
+                list(,$image_id) = explode(':', $image_datum);
+                $item['images'][] = sprintf('https://images.craigslist.org/%s_300x300.jpg', $image_id);
+            }
+        }
+
+        // put this listing into the output
+        $html_message .= '<h3 style="clear:left;margin-bottom:0px;"><a href="'.$item['link'].'">'.$item['title'].' -- '.$item['price'].'</a></h3>'."\n";
+        $html_message .= '<h5 style="margin:0px;">'.$item['location'].'</h5>'."\n";
+        $html_message .= '<h5 style="margin-top:0px;">Posted '.$item['date'].'</h5>'."\n";
+        $html_message .= '<div>'."\n";
+
+        foreach ($item['images'] as $image_src)
+        {
+            $html_message .= '<a href="'.$item['link'].'">';
+            $html_message .= '<img src="'.$image_src.'" style="float:left;margin-right:5px;margin-bottom:10px;"></a>'."\n";
+        }
+
+        $html_message .= $item['description']."\n";
         $html_message .= '</div>'."\n";
     }
 

@@ -39,8 +39,11 @@ foreach ($searches as $name => $search)
         $qs
     );
 
+    $is_first_run = !array_key_exists($md5, $last_run);
+    $this_run     = !$is_first_run ? $last_run[$md5] : 0;
+
     echo "Searching for {$name} at {$url}","\n";
-    echo sprintf('last known posting was at %s (%s)', date('Y-m-d H:i:s', $last_run[$md5]), $last_run[$md5]), "\n";
+    echo sprintf('last known posting was at %s (%s)', date('Y-m-d H:i:s', $this_run), $this_run), "\n";
 
     $html = file_get_contents($url);
 
@@ -58,9 +61,6 @@ foreach ($searches as $name => $search)
         error_log("{$name} html was empty");
         continue;
     }
-
-    $is_first_run = !array_key_exists($md5, $last_run);
-    $this_run     = !$is_first_run ? $last_run[$md5] : 0;
 
     // NOTE: two styles of `result-row` info (normal and repost)
     // <li class="result-row" data-pid="7433309959">

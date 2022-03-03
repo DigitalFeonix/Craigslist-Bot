@@ -104,17 +104,10 @@ foreach ($searches as $name => $search)
         // </h3>
         preg_match('#<h3 class="result-heading">\s*<a href="(.*)" data-id="[0-9]+" class="result-title hdrlnk" id="postid_[0-9]+" >(.*)</a>#imsU', $result_datum, $heading_matches);
 
-        $url_parts = parse_url($heading_matches[1]);
-
-        // check if local or nearby and if we want it before adding to output
-        if (!$include_nearby && $url_parts['host'] !== sprintf('%s.craigslist.org', $search['loc']))
-        {
-            echo 'skipping because not local', "\n";
-            continue;
-        }
-
         // <span class="result-price">$125</span>
         preg_match('#<span class="result-price">(.*)</span>#iU', $result_datum, $price_matches);
+
+        $is_local = TRUE;
 
         // NOTE: examples of local and nearby results
         // <span class="result-hood"> ( tacoma / pierce )</span>
@@ -122,6 +115,31 @@ foreach ($searches as $name => $search)
         if (!preg_match('#<span class="result-hood">(.*)</span>#iU', $result_datum, $location_matches))
         {
             preg_match('#<span class="nearby" title=".*">(.*)</span>#iU', $result_datum, $location_matches);
+            $is_local = FALSE;
+        }
+
+        // if we don't want nearby, additional checks need to be made
+        if (!$include_nearby)
+        {
+            // CL has marked them as nearby
+            if (!$is_local)
+            {
+                echo 'skipping because not local', "\n";
+                continue;
+            }
+
+            // if search_distance is a param, then nearby could still be from same local sub-domain, check the distance
+            // <span class="maptag">10.2mi</span>
+            if (key_exists('opt', $search) && key_exists('search_distance', $search['opt']))
+            {
+                preg_match('#<span class="maptag">([0-9]+(\.[0-9]+)?)mi</span>#', $result_datum, $distance_match);
+
+                if ($distance_match[1] > $search['opt']['search_distance'])
+                {
+                    echo 'skipping because outside of search distance', "\n";
+                    continue;
+                }
+            }
         }
 
         $item = [
